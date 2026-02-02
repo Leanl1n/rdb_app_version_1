@@ -66,10 +66,9 @@ st.markdown(
         font-size: 0.875rem;
         color: #475569;
     }
-    /* Hide Streamlit branding for cleaner look */
+    /* Hide Streamlit branding for cleaner look; keep header so top-left << sidebar toggle stays visible */
     #MainMenu { visibility: hidden; }
     footer { visibility: hidden; }
-    header { visibility: hidden; }
     </style>
     """,
     unsafe_allow_html=True,
