@@ -77,4 +77,4 @@ Edit `config.py` to change:
 
 ## License
 
-Use and modify as needed for your project.
+Rythmos DB
