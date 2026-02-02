@@ -1,21 +1,26 @@
-from typing import List, Dict
+from pathlib import Path
+from typing import List, Dict, Optional
 import pandas as pd
 import config
 from csv_handler import read_csv_to_dict, read_csv
 
-def add_dates_metadata() -> pd.DataFrame:
+def add_dates_metadata(file_path: Optional[str | Path] = None) -> pd.DataFrame:
     """
     Add date metadata columns to the dataset based on the Date column.
     Reads the raw data file as a list, finds the Date column (case-insensitive),
     and adds derived columns.
-    
+
+    Args:
+        file_path: Path to CSV file. If None, uses config.RAW_DATA_FILE (for CLI/script).
+
     Returns:
         DataFrame with date metadata columns added
-    
+
     Raises:
         ValueError: If the Date column is not found in the dataset
-    """ 
-    data_list: List[Dict] = read_csv_to_dict(str(config.RAW_DATA_FILE))
+    """
+    path = str(file_path) if file_path is not None else str(config.RAW_DATA_FILE)
+    data_list: List[Dict] = read_csv_to_dict(path)
     
     if not data_list:
         raise ValueError("The dataset is empty")

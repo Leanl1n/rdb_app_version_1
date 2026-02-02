@@ -93,7 +93,6 @@ def run_pipeline(
     progress_placeholder,
 ) -> pd.DataFrame | None:
     """Run selected pipeline steps; update progress; return final DataFrame or None on error."""
-    config.RAW_DATA_FILE = Path(temp_path)
     df = None
     n = len(steps)
     for i, step in enumerate(steps):
@@ -101,16 +100,20 @@ def run_pipeline(
         progress_placeholder.progress(p, text=f"Running: {step}")
         try:
             if step == "Normalize headers":
-                df = normalize_headers()
+                df = normalize_headers(file_path=temp_path)
             elif step == "Remove duplicates":
-                df = remove_duplicates(columns=dup_columns if dup_columns else None)
+                df = remove_duplicates(
+                    columns=dup_columns if dup_columns else None,
+                    file_path=temp_path,
+                )
             elif step == "Add date metadata":
-                df = add_dates_metadata()
+                df = add_dates_metadata(file_path=temp_path)
             elif step == "Translate columns":
                 df = translate_columns(
                     target_language=target_lang,
                     source_language=source_lang,
                     columns_to_process=translate_columns_list,
+                    file_path=temp_path,
                 )
             else:
                 continue

@@ -1,21 +1,27 @@
+from pathlib import Path
 from typing import Optional, List, Tuple
 import pandas as pd
 import config
 from csv_handler import read_csv
 
-def remove_duplicates(columns: Optional[List[str]] = None) -> pd.DataFrame:
+def remove_duplicates(
+    columns: Optional[List[str]] = None,
+    file_path: Optional[str | Path] = None,
+) -> pd.DataFrame:
     """
     Remove duplicates from the dataset.
-    
+
     Args:
         columns: List of column names to check for duplicates, or None to check all columns.
                 If None and running interactively, will prompt user for input.
                 Column names are matched case-insensitively.
-    
+        file_path: Path to CSV file. If None, uses config.RAW_DATA_FILE (for CLI/script).
+
     Returns:
         DataFrame with duplicates removed
     """
-    df = read_csv(str(config.RAW_DATA_FILE))
+    path = str(file_path) if file_path is not None else str(config.RAW_DATA_FILE)
+    df = read_csv(path)
     print(f"Original rows: {len(df)}")
     
     df_work = df.copy()

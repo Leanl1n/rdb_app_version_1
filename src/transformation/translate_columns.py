@@ -15,24 +15,27 @@ from sklearn.metrics.pairwise import cosine_similarity
 def translate_columns(
     target_language: str = 'en',
     source_language: str = 'auto',
-    columns_to_process: Optional[List[str]] = None
+    columns_to_process: Optional[List[str]] = None,
+    file_path: Optional[str] = None,
 ) -> pd.DataFrame:
     """
     Translate text columns in the dataset.
     Allows user to select which columns to translate from all available columns.
     Creates new columns with "T_" prefix for each translated column.
-    
+
     Args:
         target_language: Target language code (default: 'en' for English)
         source_language: Source language code (default: 'auto' for auto-detect)
-    
+        file_path: Path to CSV file. If None, uses config.RAW_DATA_FILE (for CLI/script).
+
     Returns:
         DataFrame with translated columns (prefixed with "T_")
-    
+
     Raises:
         ValueError: If the dataset is empty or no columns are selected
     """
-    data_list: List[Dict] = read_csv_to_dict(str(config.RAW_DATA_FILE))
+    path = file_path if file_path is not None else str(config.RAW_DATA_FILE)
+    data_list: List[Dict] = read_csv_to_dict(path)
     
     if not data_list:
         raise ValueError("The dataset is empty")
