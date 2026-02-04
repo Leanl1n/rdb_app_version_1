@@ -264,7 +264,6 @@ def main():
                 data=buf.getvalue(),
                 file_name=out_name,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                help="Download the processed data as an Excel file", #test
             )
 
 if __name__ == "__main__":
