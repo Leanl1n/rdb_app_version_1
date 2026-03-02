@@ -115,7 +115,7 @@ def run_pipeline(
             elif step == "Translate columns":
                 def _translate_progress(current: int, total: int, message: str) -> None:
                     p = (i + (current / total if total else 0)) / n
-                    progress_placeholder.progress(p, text=message)
+                    progress_placeholder.progress(max(0.0, min(1.0, p)), text=message)
                 try:
                     df = translate_columns(
                         target_language=target_lang,
