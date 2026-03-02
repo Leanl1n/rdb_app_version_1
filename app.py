@@ -5,10 +5,14 @@ Upload CSV/Excel, select operations, preview, and download result.
 
 import sys
 import tempfile
+import warnings
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+
+# Suppress terminal output from libraries when running in Streamlit
+warnings.filterwarnings("ignore")
 
 # Ensure project root is on path
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -109,11 +113,16 @@ def run_pipeline(
             elif step == "Add date metadata":
                 df = add_dates_metadata(file_path=temp_path)
             elif step == "Translate columns":
+                def _translate_progress(current: int, total: int, message: str) -> None:
+                    p = (i + (current / total if total else 0)) / n
+                    progress_placeholder.progress(p, text=message)
                 df = translate_columns(
                     target_language=target_lang,
                     source_language=source_lang,
                     columns_to_process=translate_columns_list,
                     file_path=temp_path,
+                    quiet=True,
+                    progress_callback=_translate_progress,
                 )
             else:
                 continue
@@ -184,22 +193,17 @@ def main():
 
     if "Remove duplicates" in selected_steps:
         st.sidebar.markdown("**Remove duplicates**")
-        dup_choice = st.sidebar.radio(
+        dup_columns = st.sidebar.multiselect(
             "Columns to check",
-            ["All columns", "Select columns"],
-            key="dup_choice",
+            col_names,
+            key="dup_cols",
         )
-        if dup_choice == "All columns":
-            dup_columns = col_names  # pass full list so CLI prompt is never used
-        else:
-            dup_columns = st.sidebar.multiselect("Columns", col_names, key="dup_cols")
 
     if "Translate columns" in selected_steps:
         st.sidebar.markdown("**Translate columns**")
         translate_columns_list = st.sidebar.multiselect(
             "Columns to translate",
             col_names,
-            default=col_names,
             key="trans_cols",
         )
         target_lang = st.sidebar.text_input("Target language code", value="en", key="target_lang")
@@ -216,6 +220,9 @@ def main():
     if run_clicked and selected_steps and "Remove duplicates" in selected_steps and dup_columns is not None and len(dup_columns) == 0:
         st.warning("Please select at least one column to check for duplicates.")
         return
+    if run_clicked and selected_steps and "Translate columns" in selected_steps and (not translate_columns_list or len(translate_columns_list) == 0):
+        st.warning("Please select at least one column to translate.")
+        return
 
     if run_clicked and selected_steps:
         progress_placeholder = st.empty()
@@ -223,7 +230,7 @@ def main():
         try:
             with open(fd, "w", encoding="utf-8", newline="") as f:
                 input_df.to_csv(f, index=False)
-            trans_cols = (translate_columns_list or col_names) if "Translate columns" in selected_steps else None
+            trans_cols = translate_columns_list if "Translate columns" in selected_steps else None
             result_df = run_pipeline(
                 tmp_path,
                 selected_steps,

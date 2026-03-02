@@ -1,4 +1,4 @@
-from typing import List, Dict, Set, Tuple, Optional
+from typing import List, Dict, Set, Tuple, Optional, Callable
 import pandas as pd
 import numpy as np
 import config
@@ -17,6 +17,8 @@ def translate_columns(
     source_language: str = 'auto',
     columns_to_process: Optional[List[str]] = None,
     file_path: Optional[str] = None,
+    quiet: bool = False,
+    progress_callback: Optional[Callable[[int, int, str], None]] = None,
 ) -> pd.DataFrame:
     """
     Translate text columns in the dataset.
@@ -46,44 +48,10 @@ def translate_columns(
     if not all_columns:
         raise ValueError("No columns found in the dataset")
     
-    # Use provided columns or interactive selection
+    # Use provided columns or default to all columns
     if columns_to_process is None:
-        columns_to_process = []
-        print("\nAvailable columns in the dataset:")
-        for i, col_name in enumerate(all_columns, 1):
-            print(f"  {i}. {col_name}")
-        if len(all_columns) > 1:
-            print(f"  {len(all_columns) + 1}. All columns")
-        
-        while True:
-            try:
-                if len(all_columns) > 1:
-                    choice = input(f"\nSelect columns to translate (1-{len(all_columns) + 1}, comma-separated for multiple): ").strip()
-                else:
-                    choice = input(f"\nSelect column to translate (1): ").strip()
-                
-                if not choice:
-                    columns_to_process = all_columns
-                    break
-                
-                choices = [c.strip() for c in choice.split(',')]
-                selected_indices = [int(c) for c in choices]
-                
-                max_option = len(all_columns) + 1 if len(all_columns) > 1 else len(all_columns)
-                if all(1 <= idx <= max_option for idx in selected_indices):
-                    if len(all_columns) > 1 and max_option in selected_indices:
-                        columns_to_process = all_columns
-                    else:
-                        columns_to_process = [all_columns[idx - 1] for idx in selected_indices if idx <= len(all_columns)]
-                    break
-                else:
-                    print(f"Please enter numbers between 1 and {max_option}")
-            except ValueError:
-                print("Please enter valid numbers separated by commas")
-            except KeyboardInterrupt:
-                raise ValueError("Translation cancelled by user")
+        columns_to_process = all_columns
     else:
-        # Validate provided columns exist
         valid_cols = [c for c in columns_to_process if c in all_columns]
         if not valid_cols and columns_to_process:
             raise ValueError(f"None of the selected columns exist. Available: {all_columns}")
@@ -103,7 +71,6 @@ def translate_columns(
         if col_name not in df_translated.columns:
             continue
         
-        print(f"Translating column: {col_name}...")
         translated_col_name = f"T_{col_name}"
         
         # Get column series for vectorized operations
@@ -136,10 +103,7 @@ def translate_columns(
         if not items_to_translate:
             # All values are empty
             df_translated[translated_col_name] = [''] * total_rows
-            print(f"Completed translation of {col_name} (all values were empty)")
             continue
-        
-        print(f"  Step 1: Vectorizing {len(items_to_translate)} texts...")
         
         # Step 1: Vectorize all unique texts
         unique_texts = list(text_to_indices.keys())
@@ -154,15 +118,12 @@ def translate_columns(
         
         try:
             vectors = vectorizer.fit_transform(unique_texts)
-            print(f"  Step 2: Computing similarity matrix...")
             
             # Step 2: Compute similarity matrix
             similarity_matrix = cosine_similarity(vectors)
             
             # Step 3: Group similar texts (similarity threshold: 0.85)
             similarity_threshold = 0.85
-            print(f"  Step 3: Grouping similar texts (threshold: {similarity_threshold})...")
-            
             groups: List[List[str]] = []
             used_texts: Set[str] = set()
             
@@ -178,13 +139,12 @@ def translate_columns(
                 groups.append(similar_texts)
                 used_texts.update(similar_texts)
             
-            print(f"  Found {len(groups)} groups of similar texts")
-            print(f"  Step 4: Translating groups in bulk...")
-            
-        except Exception as e:
+        except Exception:
             # Fallback: if vectorization fails, use original method
-            print(f"  Warning: Vectorization failed ({str(e)}), falling back to original method...")
             groups = [[text] for text in unique_texts]
+        
+        if progress_callback:
+            progress_callback(0, len(groups), f"Translating {col_name}...")
         
         # Step 4: Translate groups (translate one representative, apply to all similar)
         def translate_group(group: List[str]) -> Tuple[Dict[str, str], str]:
@@ -249,15 +209,15 @@ def translate_columns(
         skipped_count = 0
         cached_count = 0
         grouped_count = 0
-        
-        print(f"  Using {num_workers} workers for parallel translation...")
+        completed = 0
+        num_groups = len(groups)
         
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
             # Submit all group translation tasks
             future_to_group = {executor.submit(translate_group, group): group for group in groups}
             
-            # Process completed translations with progress bar
-            with tqdm(total=len(groups), desc=f"Translating {col_name}", unit="group") as pbar:
+            # Process completed translations with progress bar (disabled when quiet=True, e.g. Streamlit)
+            with tqdm(total=num_groups, desc=f"Translating {col_name}", unit="group", disable=quiet) as pbar:
                 for future in as_completed(future_to_group):
                     try:
                         group_translations, status = future.result()
@@ -278,23 +238,29 @@ def translate_columns(
                         elif status == 'skipped':
                             skipped_count += len(group)
                         
+                        completed += 1
+                        if progress_callback:
+                            progress_callback(completed, num_groups, f"Translating {col_name} ({completed}/{num_groups} groups)")
+                        
                         pbar.set_postfix({
-                            'groups': len(groups),
+                            'groups': num_groups,
                             'grouped': grouped_count,
                             'cached': cached_count,
                             'skipped': skipped_count
                         })
                         pbar.update(1)
-                    except Exception as e:
+                    except Exception:
                         # Handle errors
                         group = future_to_group[future]
                         for text in group:
                             if text in text_to_indices:
                                 for idx in text_to_indices[text]:
                                     translated_values[idx] = 'NA'
+                        completed += 1
+                        if progress_callback:
+                            progress_callback(completed, num_groups, f"Translating {col_name} ({completed}/{num_groups} groups)")
                         pbar.update(1)
         
         df_translated[translated_col_name] = translated_values
-        print(f"Completed translation of {col_name} (Total: {total_rows}, Groups: {len(groups)}, Grouped texts: {grouped_count}, Cached: {cached_count}, Skipped: {skipped_count})")
     
     return df_translated
