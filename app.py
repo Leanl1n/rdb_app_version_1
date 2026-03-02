@@ -116,13 +116,21 @@ def run_pipeline(
                 def _translate_progress(current: int, total: int, message: str) -> None:
                     p = (i + (current / total if total else 0)) / n
                     progress_placeholder.progress(p, text=message)
-                df = translate_columns(
-                    target_language=target_lang,
-                    source_language=source_lang,
-                    columns_to_process=translate_columns_list,
-                    file_path=temp_path,
-                    progress_callback=_translate_progress,
-                )
+                try:
+                    df = translate_columns(
+                        target_language=target_lang,
+                        source_language=source_lang,
+                        columns_to_process=translate_columns_list,
+                        file_path=temp_path,
+                        progress_callback=_translate_progress,
+                    )
+                except TypeError:
+                    df = translate_columns(
+                        target_language=target_lang,
+                        source_language=source_lang,
+                        columns_to_process=translate_columns_list,
+                        file_path=temp_path,
+                    )
             else:
                 continue
             # After first step, subsequent steps read from file; write current df so next step sees it

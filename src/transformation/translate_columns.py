@@ -66,9 +66,14 @@ def translate_columns(
     num_workers = min(os.cpu_count() or 4, 10)  # Cap at 10 to avoid overwhelming the API
     
     # Translate each selected column
-    for col_name in columns_to_process:
+    total_cols = len(columns_to_process)
+    total_rows_global = len(df_translated)
+    total_work = total_cols * total_rows_global  # total row-equivalents (1 per column per row)
+    for col_idx, col_name in enumerate(columns_to_process):
         if col_name not in df_translated.columns:
             continue
+        if progress_callback:
+            progress_callback(col_idx * total_rows_global, total_work, f"Translating: {col_idx * total_rows_global}/{total_work} rows")
         
         translated_col_name = f"T_{col_name}"
         
@@ -102,6 +107,8 @@ def translate_columns(
         if not items_to_translate:
             # All values are empty
             df_translated[translated_col_name] = [''] * total_rows
+            if progress_callback:
+                progress_callback((col_idx + 1) * total_rows_global, total_work, f"Translating: {(col_idx + 1) * total_rows_global}/{total_work} rows")
             continue
         
         # Step 1: Vectorize all unique texts
@@ -141,9 +148,6 @@ def translate_columns(
         except Exception:
             # Fallback: if vectorization fails, use original method
             groups = [[text] for text in unique_texts]
-        
-        if progress_callback:
-            progress_callback(0, len(groups), f"Translating {col_name}...")
         
         # Step 4: Translate groups (translate one representative, apply to all similar)
         def translate_group(group: List[str]) -> Tuple[Dict[str, str], str]:
@@ -210,6 +214,7 @@ def translate_columns(
         grouped_count = 0
         completed = 0
         num_groups = len(groups)
+        rows_filled = 0  # rows filled in this column so far (for progress)
         
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
             # Submit all group translation tasks
@@ -227,6 +232,10 @@ def translate_columns(
                             if text in text_to_indices:
                                 for idx in text_to_indices[text]:
                                     translated_values[idx] = translation
+                        rows_filled += sum(len(text_to_indices.get(text, [])) for text in group_translations)
+                        if progress_callback:
+                            current_work = col_idx * total_rows_global + rows_filled
+                            progress_callback(current_work, total_work, f"Translating: {current_work}/{total_work} rows")
                         
                         # Count statistics
                         if len(group) > 1:
@@ -238,9 +247,6 @@ def translate_columns(
                             skipped_count += len(group)
                         
                         completed += 1
-                        if progress_callback:
-                            progress_callback(completed, num_groups, f"Translating {col_name} ({completed}/{num_groups} groups)")
-                        
                         pbar.set_postfix({
                             'groups': num_groups,
                             'grouped': grouped_count,
@@ -255,11 +261,15 @@ def translate_columns(
                             if text in text_to_indices:
                                 for idx in text_to_indices[text]:
                                     translated_values[idx] = 'NA'
-                        completed += 1
+                        rows_filled += sum(len(text_to_indices.get(text, [])) for text in group)
                         if progress_callback:
-                            progress_callback(completed, num_groups, f"Translating {col_name} ({completed}/{num_groups} groups)")
+                            current_work = col_idx * total_rows_global + rows_filled
+                            progress_callback(current_work, total_work, f"Translating: {current_work}/{total_work} rows")
+                        completed += 1
                         pbar.update(1)
         
         df_translated[translated_col_name] = translated_values
     
+    if progress_callback and total_work:
+        progress_callback(total_work, total_work, f"Translating: {total_work}/{total_work} rows - done")
     return df_translated
