@@ -45,16 +45,6 @@ def get_group_color(group: str) -> str:
 def get_group_bg(group: str) -> str:
     return GROUP_CONFIG.get(group, {}).get("bg", "#f8fafc")
 
-
-
-
-# SVG icons per group
-GROUP_ICONS = {
-    "Cleaning": '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><polyline points="19 6 18 20 6 20 5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>',
-    "Enrichment": '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>',
-}
-
-
 # Sidebar
 def render_sidebar(col_names: list) -> tuple:
     st.sidebar.markdown('<p class="sidebar-header">Pipeline Process</p>', unsafe_allow_html=True)
