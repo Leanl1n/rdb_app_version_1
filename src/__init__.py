@@ -14,9 +14,10 @@ from cleaning.normalize_headers import normalize_headers
 from cleaning.removing_duplicates import remove_duplicates
 from transformation.add_dates_metadata import add_dates_metadata
 from transformation.translate_columns import translate_columns
+from clustering.topic_clustering import topic_cluster
 
 __all__ = [
     'read_csv', 'write_csv', 'append_csv', 'read_csv_to_dict',
     'normalize_headers', 'remove_duplicates', 'add_dates_metadata',
-    'translate_columns'
+    'translate_columns', 'topic_cluster'
 ]

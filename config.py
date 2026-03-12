@@ -45,6 +45,10 @@ STEP_REGISTRY = [
     {"id": "translate",
      "group": "Enrichment",
      "label": "Translate columns"},
+
+    {"id": "topic_cluster",
+     "group": "Analysis",
+     "label": "Topic clustering"},
 ]
 
 ALL_LABELS = [s["label"] for s in STEP_REGISTRY]
@@ -54,6 +58,7 @@ GROUP_CONFIG = {
     "Cleaning": {"color": "#6366f1", "bg": "#eef2ff"},
     "Enrichment": {"color": "#f59e0b", "bg": "#fffbeb"},
     "Transformation": {"color": "#10b981", "bg": "#ecfdf5"},
+    "Analysis": {"color": "#0ea5e9", "bg": "#f0f9ff"},
 }
 
 # Step Category Color — dark mode
@@ -63,9 +68,11 @@ GROUP_DARK_BG = {
     "Cleaning":"#1e1b4b",   # deep indigo
     "Enrichment":"#1c1710",   # deep amber
     "Transformation":"#052e1c",   # deep emerald
+    "Analysis":"#0c2a3d",          # deep sky blue
 }
 GROUP_DARK_COLOR = {
     "Cleaning":"#818cf8",   # light indigo
     "Enrichment":"#fbbf24",   # light amber
     "Transformation":"#34d399",   # light emerald
+    "Analysis":"#38bdf8",          # light sky blue
 }

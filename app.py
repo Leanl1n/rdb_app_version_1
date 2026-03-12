@@ -9,8 +9,11 @@ import warnings
 import io
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import streamlit as st
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 warnings.filterwarnings("ignore")
 
@@ -23,6 +26,7 @@ from src.cleaning.normalize_headers import normalize_headers
 from src.cleaning.removing_duplicates import remove_duplicates
 from src.transformation.add_dates_metadata import add_dates_metadata
 from src.transformation.translate_columns import translate_columns
+from src.clustering.topic_clustering import topic_cluster, TopicClusterer, clean_text
 from config import STEP_REGISTRY, GROUP_CONFIG
 
 
@@ -117,7 +121,28 @@ def render_sidebar(col_names: list) -> tuple:
         target_lang = st.sidebar.text_input("Target language code", value="en", key="target_lang")
         source_lang = st.sidebar.text_input("Source language code", value="auto", key="source_lang")
 
-    return selected_labels, dup_columns, translate_cols_list, target_lang, source_lang
+    # Topic clustering options
+    cluster_params = None
+    if "Topic clustering" in selected_labels:
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("**Topic clustering — options**")
+        text_cols = [c for c in col_names]
+        cluster_text_col = st.sidebar.selectbox("Text column to cluster", text_cols, key="cluster_text_col")
+        cluster_n = st.sidebar.slider("Number of clusters", 2, 20, 5, key="cluster_n")
+        cluster_max_df = st.sidebar.slider("Max document frequency", 0.1, 1.0, 0.95, 0.05, key="cluster_max_df")
+        cluster_min_df = st.sidebar.slider("Min document frequency", 1, 10, 1, key="cluster_min_df")
+        cluster_n_init = st.sidebar.slider("K-Means initializations", 1, 20, 10, key="cluster_n_init")
+        cluster_clean = st.sidebar.checkbox("Clean text before clustering", value=True, key="cluster_clean")
+        cluster_params = {
+            "text_column": cluster_text_col,
+            "n_clusters": cluster_n,
+            "max_df": cluster_max_df,
+            "min_df": cluster_min_df,
+            "n_init": cluster_n_init,
+            "clean_text_option": cluster_clean,
+        }
+
+    return selected_labels, dup_columns, translate_cols_list, target_lang, source_lang, cluster_params
 
 
 # Pipeline strip builder
@@ -179,6 +204,7 @@ def run_pipeline(
     target_lang: str,
     source_lang: str,
     progress_placeholder,
+    cluster_params: dict | None = None,
 ) -> pd.DataFrame | None:
     df = None
     n = len(steps)
@@ -216,6 +242,24 @@ def run_pipeline(
                         columns_to_process=translate_columns_list,
                         file_path=temp_path,
                     )
+
+            elif step == "Topic clustering":
+                params = cluster_params or {}
+                df = topic_cluster(
+                    file_path=temp_path,
+                    text_column=params.get("text_column"),
+                    n_clusters=params.get("n_clusters", 5),
+                    max_df=params.get("max_df", 0.95),
+                    min_df=params.get("min_df", 1),
+                    n_init=params.get("n_init", 10),
+                    clean_text_option=params.get("clean_text_option", True),
+                )
+                # Store clusterer for visualizations
+                if hasattr(df, 'attrs') and 'clusterer' in df.attrs:
+                    st.session_state['_clusterer'] = df.attrs['clusterer']
+                    st.session_state['_cluster_text_col'] = df.attrs.get('cluster_text_column')
+                    st.session_state['_cluster_n'] = params.get("n_clusters", 5)
+
             else:
                 continue
 
@@ -242,7 +286,7 @@ def main():
         <div class="hero-actions">
             <span class="hero-badge"><span class="hero-badge-dot"></span>Ready</span>
             <span class="hero-badge">📁 CSV &amp; Excel</span>
-            <span class="hero-badge">⚡ 4 operations</span>
+            <span class="hero-badge">⚡ 5 operations</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -271,7 +315,7 @@ def main():
         return
 
     col_names = list(input_df.columns)
-    selected_steps, dup_columns, translate_cols_list, target_lang, source_lang = render_sidebar(col_names)
+    selected_steps, dup_columns, translate_cols_list, target_lang, source_lang, cluster_params = render_sidebar(col_names)
 
     # ── Metric cards ─────────────────────────────────────────────────────
     st.markdown('<div class="section-divider"><span class="section-divider-label">Dataset Overview</span><span class="section-divider-line"></span></div>', unsafe_allow_html=True)
@@ -324,6 +368,7 @@ def main():
                 tmp_path, selected_steps, dup_columns,
                 translate_cols_list if "Translate columns" in selected_steps else None,
                 target_lang, source_lang, progress_placeholder,
+                cluster_params=cluster_params if "Topic clustering" in selected_steps else None,
             )
         finally:
             try:
@@ -383,6 +428,133 @@ def main():
                 file_name=f"{base_name}_processed.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
+
+        # ── Topic Clustering Visualizations ──────────────────────────────
+        if "Topic clustering" in selected_steps and st.session_state.get('_clusterer'):
+            display_clustering_visualizations(result_df)
+
+
+def display_clustering_visualizations(result_df: pd.DataFrame):
+    """Display full clustering visualizations after pipeline run."""
+    clusterer = st.session_state.get('_clusterer')
+    text_column = st.session_state.get('_cluster_text_col')
+    n_clusters = st.session_state.get('_cluster_n', 5)
+
+    if clusterer is None or 'Cluster_Topic' not in result_df.columns:
+        return
+
+    st.markdown('<div class="section-divider" style="margin-top:1.5rem"><span class="section-divider-label">Clustering Analysis</span><span class="section-divider-line"></span></div>', unsafe_allow_html=True)
+
+    # ── Cluster Distribution + Top Terms ─────────────────────────────
+    col1, col2 = st.columns([1, 2])
+
+    with col1:
+        st.markdown("**Cluster Distribution**")
+        cluster_counts = result_df['Cluster_Topic'].value_counts().sort_index()
+        st.dataframe(cluster_counts.rename('Count'), use_container_width=True)
+
+    with col2:
+        st.bar_chart(result_df['Cluster_Topic'].value_counts().sort_index())
+
+    st.divider()
+
+    # ── Top Terms per Cluster ────────────────────────────────────────
+    st.markdown("**Top Terms per Cluster**")
+    top_terms = clusterer.get_top_terms(n_terms=10)
+    cols = st.columns(min(3, n_clusters))
+    for cluster_id in range(n_clusters):
+        with cols[cluster_id % len(cols)]:
+            terms = top_terms.get(cluster_id, [])
+            st.markdown(f"**Cluster {cluster_id}**")
+            for i, term in enumerate(terms[:5], 1):
+                st.write(f"{i}. {term}")
+
+    st.divider()
+
+    # ── PCA Scatter Plot + Pie Chart ─────────────────────────────────
+    st.markdown("**Cluster Visualizations**")
+    viz1, viz2 = st.columns(2)
+
+    with viz1:
+        try:
+            texts = result_df[text_column].tolist() if text_column else None
+            coordinates_2d, clusters = clusterer.get_2d_coordinates(texts)
+
+            fig, ax = plt.subplots(figsize=(8, 6))
+            colors = plt.cm.get_cmap('tab20')(np.linspace(0, 1, n_clusters))
+
+            for cid in range(n_clusters):
+                mask = clusters == cid
+                ax.scatter(
+                    coordinates_2d[mask, 0], coordinates_2d[mask, 1],
+                    c=[colors[cid]], label=f'Cluster {cid}',
+                    alpha=0.6, s=80, edgecolors='black', linewidth=0.5,
+                )
+
+            ax.set_xlabel('PC 1', fontsize=11)
+            ax.set_ylabel('PC 2', fontsize=11)
+            ax.set_title('Cluster Distribution (PCA)', fontsize=13, fontweight='bold')
+            ax.legend(fontsize=8, loc='best')
+            ax.grid(True, alpha=0.3)
+            plt.tight_layout()
+            st.pyplot(fig)
+        except Exception as e:
+            st.error(f"PCA visualization error: {e}")
+
+    with viz2:
+        try:
+            cluster_counts = result_df['Cluster_Topic'].value_counts().sort_index()
+            fig, ax = plt.subplots(figsize=(8, 6))
+            colors_pie = plt.cm.get_cmap('tab20')(np.linspace(0, 1, n_clusters))
+            wedges, texts_pie, autotexts = ax.pie(
+                cluster_counts,
+                labels=[f'Cluster {i}' for i in cluster_counts.index],
+                autopct='%1.1f%%',
+                colors=colors_pie[:len(cluster_counts)],
+                startangle=90,
+                textprops={'fontsize': 9},
+            )
+            for at in autotexts:
+                at.set_color('white')
+                at.set_fontweight('bold')
+                at.set_fontsize(8)
+            ax.set_title('Cluster Size Distribution', fontsize=13, fontweight='bold')
+            plt.tight_layout()
+            st.pyplot(fig)
+        except Exception as e:
+            st.error(f"Pie chart error: {e}")
+
+    st.divider()
+
+    # ── Top Terms Heatmap ────────────────────────────────────────────
+    st.markdown("**Top Terms Heatmap**")
+    try:
+        terms_df = clusterer.get_top_terms_matrix(n_terms=8)
+        fig, ax = plt.subplots(figsize=(12, max(6, len(terms_df) * 0.3)))
+        sns.heatmap(
+            terms_df, annot=True, fmt='.2f', cmap='YlOrRd', ax=ax,
+            cbar_kws={'label': 'Term Importance Score'},
+            linewidths=0.5, linecolor='gray',
+        )
+        ax.set_xlabel('Cluster', fontsize=11, fontweight='bold')
+        ax.set_ylabel('Terms', fontsize=11, fontweight='bold')
+        ax.set_title('Top Terms Importance by Cluster', fontsize=13, fontweight='bold')
+        plt.tight_layout()
+        st.pyplot(fig)
+    except Exception as e:
+        st.error(f"Heatmap error: {e}")
+
+    st.divider()
+
+    # ── Cluster Quality Metrics ──────────────────────────────────────
+    st.markdown("**Cluster Quality Metrics**")
+    m1, m2 = st.columns(2)
+    with m1:
+        inertia = clusterer.kmeans.inertia_
+        st.metric("Inertia (Sum of Squared Distances)", f"{inertia:.2f}")
+    with m2:
+        avg_dist = np.sqrt(inertia / len(result_df))
+        st.metric("Average Distance to Centroid", f"{avg_dist:.2f}")
 
 
 if __name__ == "__main__":
