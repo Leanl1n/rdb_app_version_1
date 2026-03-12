@@ -6,15 +6,14 @@ Upload CSV/Excel, select operations, preview, and download result.
 import sys
 import tempfile
 import warnings
+import io
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-# Suppress terminal output from libraries when running in Streamlit
 warnings.filterwarnings("ignore")
 
-# Ensure project root is on path
 PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -24,69 +23,127 @@ from src.cleaning.normalize_headers import normalize_headers
 from src.cleaning.removing_duplicates import remove_duplicates
 from src.transformation.add_dates_metadata import add_dates_metadata
 from src.transformation.translate_columns import translate_columns
-from src.utils.csv_handler import read_csv
+from config import STEP_REGISTRY, GROUP_CONFIG
 
-# --- Page config ---
+
+# Page config
 st.set_page_config(
     page_title="Data Pipeline",
-    page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# --- Custom styles ---
-st.markdown(
-    """
-    <style>
-    /* Header block */
-    .main-header {
-        font-family: 'Segoe UI', system-ui, sans-serif;
-        font-weight: 600;
-        font-size: 1.75rem;
-        color: #1a1a2e;
-        letter-spacing: -0.02em;
-        margin-bottom: 0.25rem;
-    }
-    .main-subtitle {
-        font-size: 0.9rem;
-        color: #64748b;
-        margin-bottom: 1.5rem;
-    }
-    /* Section cards */
-    .section-title {
-        font-size: 0.85rem;
-        font-weight: 600;
-        color: #334155;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin-bottom: 0.5rem;
-    }
-    /* Metrics / status */
-    .status-box {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 6px;
-        padding: 0.75rem 1rem;
-        font-size: 0.875rem;
-        color: #475569;
-    }
-    /* Hide Streamlit branding for cleaner look; keep header so top-left << sidebar toggle stays visible */
-    #MainMenu { visibility: hidden; }
-    footer { visibility: hidden; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+# Styles
+from styles import STYLES
+st.markdown(STYLES, unsafe_allow_html=True)
 
-def load_uploaded_file(uploaded_file) -> pd.DataFrame:
-    """Load CSV or Excel from uploaded file."""
+
+def get_group_color(group: str) -> str:
+    return GROUP_CONFIG.get(group, {}).get("color", "#94a3b8")
+
+def get_group_bg(group: str) -> str:
+    return GROUP_CONFIG.get(group, {}).get("bg", "#f8fafc")
+
+# Sidebar
+def render_sidebar(col_names: list) -> tuple:
+    groups: dict[str, list] = {}
+    for step in STEP_REGISTRY:
+        groups.setdefault(step["group"], []).append(step)
+
+    # ── Select all / Deselect all ───────────────────────────────────
+    all_checked = all(st.session_state.get(s["id"], False) for s in STEP_REGISTRY)
+
+    def _toggle_all():
+        new_val = not all(st.session_state.get(s["id"], False) for s in STEP_REGISTRY)
+        for s in STEP_REGISTRY:
+            st.session_state[s["id"]] = new_val
+
+    st.sidebar.button(
+        "Deselect all" if all_checked else "Select all",
+        key="select_all_btn",
+        on_click=_toggle_all,
+        use_container_width=True,
+    )
+
+    selected_labels = []
+
+    for group_name, group_steps in groups.items():
+        with st.sidebar.expander(group_name, expanded=True):
+            for step in group_steps:
+                if st.checkbox(step["label"], key=step["id"]):
+                    selected_labels.append(step["label"])
+
+    # ── Per-step options (only appear when relevant) ────────────────
+    dup_columns = None
+    translate_cols_list = None
+    target_lang = "en"
+    source_lang = "auto"
+
+    if "Remove duplicates" in selected_labels:
+        st.sidebar.caption("Requires: Remove duplicates")
+        dup_columns = st.sidebar.multiselect("Columns to check", col_names, key="dup_cols")
+
+    if "Translate columns" in selected_labels:
+        st.sidebar.caption("Requires: Translate columns")
+        translate_cols_list = st.sidebar.multiselect("Columns to translate", col_names, key="trans_cols")
+        col1, col2 = st.sidebar.columns(2, gap="small")
+        target_lang = col1.text_input("Target", value="en", key="target_lang")
+        source_lang = col2.text_input("Source", value="auto", key="source_lang")
+
+    return selected_labels, dup_columns, translate_cols_list, target_lang, source_lang
+
+
+# Pipeline strip builder
+def render_pipeline_strip(selected_steps: list):
+    if not selected_steps:
+        return
+    chips = []
+    for i, label in enumerate(selected_steps):
+        step = next((s for s in STEP_REGISTRY if s["label"] == label), None)
+        group = step["group"] if step else "Cleaning"
+        color = get_group_color(group)
+        bg = get_group_bg(group)
+        chips.append(
+            f'<span class="pipeline-chip" style="background:{bg};color:{color};border:1px solid {color}44">'
+            f'{label}</span>'
+        )
+        if i < len(selected_steps) - 1:
+            chips.append('<span class="pipeline-arrow">→</span>')
+
+    st.markdown(
+        '<div class="pipeline-strip"><span class="pipeline-label">Pipeline:</span>'
+        + "".join(chips) + '</div>',
+        unsafe_allow_html=True,
+    )
+
+
+# File helpers
+def detect_encoding(uploaded_file) -> str:
+    raw = uploaded_file.read(50_000)
+    uploaded_file.seek(0)
+    for enc in config.CSV_ENCODINGS:
+        try:
+            raw.decode(enc)
+            return enc
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return config.CSV_ENCODINGS[0]
+
+
+def load_uploaded_file(uploaded_file) -> tuple[pd.DataFrame, str]:
     suffix = Path(uploaded_file.name).suffix.lower()
-    if suffix == ".csv":
-        return pd.read_csv(uploaded_file, encoding="utf-8", on_bad_lines="skip")
     if suffix in (".xlsx", ".xls"):
-        return pd.read_excel(uploaded_file)
+        return pd.read_excel(uploaded_file), "n/a"
+    if suffix == ".csv":
+        encoding = detect_encoding(uploaded_file)
+        return (
+            pd.read_csv(uploaded_file, encoding=encoding, on_bad_lines="skip"),
+            encoding,
+        )
     raise ValueError("Unsupported format. Use CSV or Excel (.xlsx, .xls).")
 
+
+# Pipeline runner
 def run_pipeline(
     temp_path: str,
     steps: list,
@@ -96,26 +153,27 @@ def run_pipeline(
     source_lang: str,
     progress_placeholder,
 ) -> pd.DataFrame | None:
-    """Run selected pipeline steps; update progress; return final DataFrame or None on error."""
     df = None
     n = len(steps)
     for i, step in enumerate(steps):
-        p = (i + 1) / n
-        progress_placeholder.progress(p, text=f"Running: {step}")
+        progress_placeholder.progress((i + 1) / n, text=f"Running: {step}")
         try:
             if step == "Normalize headers":
                 df = normalize_headers(file_path=temp_path)
+
             elif step == "Remove duplicates":
                 df = remove_duplicates(
                     columns=dup_columns if dup_columns else None,
                     file_path=temp_path,
                 )
+
             elif step == "Add date metadata":
                 df = add_dates_metadata(file_path=temp_path)
+
             elif step == "Translate columns":
                 def _translate_progress(current: int, total: int, message: str) -> None:
-                    p = (i + (current / total if total else 0)) / n
-                    progress_placeholder.progress(max(0.0, min(1.0, p)), text=message)
+                    pct = (i + (current / total if total else 0)) / n
+                    progress_placeholder.progress(max(0.0, min(1.0, pct)), text=message)
                 try:
                     df = translate_columns(
                         target_language=target_lang,
@@ -133,43 +191,37 @@ def run_pipeline(
                     )
             else:
                 continue
-            # After first step, subsequent steps read from file; write current df so next step sees it
+
             if i < n - 1 and df is not None:
                 df.to_csv(temp_path, index=False)
+
         except Exception as e:
             progress_placeholder.progress(1.0, text="Error")
             st.error(str(e))
             return None
+
     progress_placeholder.progress(1.0, text="Done")
     return df
 
+
+# Main
 def main():
-    st.markdown('<p class="main-header">Data Pipeline</p>', unsafe_allow_html=True)
-    st.markdown(
-        '<p class="main-subtitle">Upload a CSV or Excel file, choose operations, preview, and download the result.</p>',
-        unsafe_allow_html=True,
-    )
+    # ── Hero header ──────────────────────────────────────────────────────
+    st.markdown("""
+    <div class="page-hero">
+        <div class="hero-eyebrow">Media Intelligence Platform</div>
+        <p class="main-header">Data Pipeline</p>
+        <p class="main-subtitle">Transform raw media data into clean, enriched datasets ready for analysis.</p>
+        <div class="hero-actions">
+            <span class="hero-badge"><span class="hero-badge-dot"></span>Ready</span>
+            <span class="hero-badge">📁 CSV &amp; Excel</span>
+            <span class="hero-badge">⚡ 4 operations</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # --- Sidebar: process selection ---
-    st.sidebar.markdown('<p class="section-title">Process</p>', unsafe_allow_html=True)
-    all_options = [
-        "Normalize headers",
-        "Remove duplicates",
-        "Add date metadata",
-        "Translate columns",
-    ]
-    run_all = st.sidebar.checkbox("Run all steps", value=False)
-    if run_all:
-        selected_steps = all_options.copy()
-    else:
-        selected_steps = st.sidebar.multiselect(
-            "Select steps to run",
-            options=all_options,
-            default=[],
-        )
-
-    # --- Main: file upload ---
-    st.markdown('<p class="section-title">Input</p>', unsafe_allow_html=True)
+    # ── File upload ──────────────────────────────────────────────────────
+    st.markdown('<div class="section-divider"><span class="section-divider-label">Input</span><span class="section-divider-line"></span></div>', unsafe_allow_html=True)
     uploaded_file = st.file_uploader(
         "Upload CSV or Excel",
         type=["csv", "xlsx", "xls"],
@@ -177,57 +229,61 @@ def main():
     )
 
     if not uploaded_file:
-        st.info("Upload a file to begin.")
+        st.markdown("""
+        <div style="font-family:'DM Sans',sans-serif;font-size:0.82rem;color:#94a3b8;
+             text-align:center;padding:1rem 0;letter-spacing:0.01em;">
+            Drop a file above to begin — supports CSV, XLSX, XLS up to 200MB
+        </div>
+        """, unsafe_allow_html=True)
         return
 
     try:
-        input_df = load_uploaded_file(uploaded_file)
+        input_df, _ = load_uploaded_file(uploaded_file)
     except Exception as e:
         st.error(f"Failed to load file: {e}")
         return
 
-    st.markdown(
-        f'<div class="status-box">Rows: {len(input_df):,} | Columns: {len(input_df.columns):,}</div>',
-        unsafe_allow_html=True,
-    )
-
-    # --- Options for selected steps ---
     col_names = list(input_df.columns)
-    dup_columns = None
-    translate_columns_list = None
-    target_lang = "en"
-    source_lang = "auto"
+    selected_steps, dup_columns, translate_cols_list, target_lang, source_lang = render_sidebar(col_names)
 
-    if "Remove duplicates" in selected_steps:
-        st.sidebar.markdown("**Remove duplicates**")
-        dup_columns = st.sidebar.multiselect(
-            "Columns to check",
-            col_names,
-            key="dup_cols",
-        )
+    # ── Metric cards ─────────────────────────────────────────────────────
+    st.markdown('<div class="section-divider"><span class="section-divider-label">Dataset Overview</span><span class="section-divider-line"></span></div>', unsafe_allow_html=True)
+    c1, c2 = st.columns(2, gap="medium")
+    with c1:
+        st.markdown(f"""
+        <div class="status-box rows">
+            <div class="status-box-glow"></div>
+            <div class="status-icon">Rows</div>
+            <div class="status-val">{len(input_df):,}</div>
+            <div class="status-lbl">Total records</div>
+        </div>""", unsafe_allow_html=True)
+    with c2:
+        st.markdown(f"""
+        <div class="status-box cols">
+            <div class="status-box-glow"></div>
+            <div class="status-icon">Columns</div>
+            <div class="status-val">{len(input_df.columns)}</div>
+            <div class="status-lbl">Fields detected</div>
+        </div>""", unsafe_allow_html=True)
 
-    if "Translate columns" in selected_steps:
-        st.sidebar.markdown("**Translate columns**")
-        translate_columns_list = st.sidebar.multiselect(
-            "Columns to translate",
-            col_names,
-            key="trans_cols",
-        )
-        target_lang = st.sidebar.text_input("Target language code", value="en", key="target_lang")
-        source_lang = st.sidebar.text_input("Source language code", value="auto", key="source_lang")
+    # ── Data preview ─────────────────────────────────────────────────────
+    st.markdown('<div class="section-divider" style="margin-top:1.25rem"><span class="section-divider-label">Preview</span><span class="section-divider-line"></span></div>', unsafe_allow_html=True)
+    st.dataframe(input_df.head(5), use_container_width=True, height=220)
 
-    # --- Run ---
-    st.markdown('<p class="section-title">Run</p>', unsafe_allow_html=True)
-    run_clicked = st.button("Run pipeline")
+    # ── Pipeline strip + Run ─────────────────────────────────────────────
+    if selected_steps:
+        render_pipeline_strip(selected_steps)
 
-    if run_clicked and not selected_steps:
-        st.warning("Select at least one process step.")
-        return
+    st.markdown('<div class="section-divider"><span class="section-divider-label">Execute</span><span class="section-divider-line"></span></div>', unsafe_allow_html=True)
+    run_clicked = st.button("▶  Run Pipeline", type="primary", disabled=not selected_steps, use_container_width=False)
 
-    if run_clicked and selected_steps and "Remove duplicates" in selected_steps and dup_columns is not None and len(dup_columns) == 0:
+    if not selected_steps:
+        st.markdown('<p style="font-family:DM Sans,sans-serif;font-size:0.78rem;color:#94a3b8;margin-top:0.25rem">Select at least one pipeline step from the sidebar to begin.</p>', unsafe_allow_html=True)
+
+    if run_clicked and "Remove duplicates" in selected_steps and not dup_columns:
         st.warning("Please select at least one column to check for duplicates.")
         return
-    if run_clicked and selected_steps and "Translate columns" in selected_steps and (not translate_columns_list or len(translate_columns_list) == 0):
+    if run_clicked and "Translate columns" in selected_steps and not translate_cols_list:
         st.warning("Please select at least one column to translate.")
         return
 
@@ -237,15 +293,10 @@ def main():
         try:
             with open(fd, "w", encoding="utf-8", newline="") as f:
                 input_df.to_csv(f, index=False)
-            trans_cols = translate_columns_list if "Translate columns" in selected_steps else None
             result_df = run_pipeline(
-                tmp_path,
-                selected_steps,
-                dup_columns,
-                trans_cols,
-                target_lang,
-                source_lang,
-                progress_placeholder,
+                tmp_path, selected_steps, dup_columns,
+                translate_cols_list if "Translate columns" in selected_steps else None,
+                target_lang, source_lang, progress_placeholder,
             )
         finally:
             try:
@@ -256,35 +307,56 @@ def main():
         if result_df is None:
             return
 
-        # --- Preview ---
-        st.markdown('<p class="section-title">Preview</p>', unsafe_allow_html=True)
+        # ── Results ──────────────────────────────────────────────────────
+        st.markdown('<div class="section-divider" style="margin-top:1.5rem"><span class="section-divider-label">Results</span><span class="section-divider-line"></span></div>', unsafe_allow_html=True)
+
+        r1, r2 = st.columns(2, gap="medium")
+        with r1:
+            st.markdown(f"""
+            <div class="status-box rows">
+                <div class="status-box-glow"></div>
+                <div class="status-icon">Output Rows</div>
+                <div class="status-val">{len(result_df):,}</div>
+                <div class="status-lbl">Records after processing</div>
+            </div>""", unsafe_allow_html=True)
+        with r2:
+            delta = len(input_df) - len(result_df)
+            sign = "−" if delta > 0 else "+"
+            st.markdown(f"""
+            <div class="status-box cols">
+                <div class="status-box-glow"></div>
+                <div class="status-icon">Delta</div>
+                <div class="status-val">{sign}{abs(delta):,}</div>
+                <div class="status-lbl">Rows {"removed" if delta > 0 else "added"}</div>
+            </div>""", unsafe_allow_html=True)
+
+        st.markdown('<div style="margin-top:1rem"></div>', unsafe_allow_html=True)
         st.dataframe(result_df.head(100), use_container_width=True)
         st.caption(f"Showing first 100 of {len(result_df):,} rows.")
 
-        # --- Download ---
-        st.markdown('<p class="section-title">Download</p>', unsafe_allow_html=True)
+        # ── Download ──────────────────────────────────────────────────────
+        st.markdown('<div class="section-divider" style="margin-top:1rem"><span class="section-divider-label">Download</span><span class="section-divider-line"></span></div>', unsafe_allow_html=True)
         out_format = st.radio("Format", ["CSV", "Excel"], horizontal=True, key="out_fmt")
         base_name = Path(uploaded_file.name).stem
+
         if out_format == "CSV":
-            out_name = f"{base_name}_processed.csv"
-            out_bytes = result_df.to_csv(index=False).encode("utf-8")
             st.download_button(
-                label="Download CSV",
-                data=out_bytes,
-                file_name=out_name,
+                label="⬇  Download CSV",
+                data=result_df.to_csv(index=False).encode("utf-8"),
+                file_name=f"{base_name}_processed.csv",
                 mime="text/csv",
             )
         else:
-            out_name = f"{base_name}_processed.xlsx"
-            buf = __import__("io").BytesIO()
+            buf = io.BytesIO()
             result_df.to_excel(buf, index=False, engine="openpyxl")
             buf.seek(0)
             st.download_button(
-                label="Download Excel",
+                label="⬇  Download Excel",
                 data=buf.getvalue(),
-                file_name=out_name,
+                file_name=f"{base_name}_processed.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
+
 
 if __name__ == "__main__":
     main()
