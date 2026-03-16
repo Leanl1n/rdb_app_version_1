@@ -40,11 +40,27 @@ def merge_csv(file_path=None, uploaded_files=None):
 
         country_code = filename[:2].upper()
 
-        try:
-            df = pd.read_csv(uf, encoding='utf-16', sep='\t')
-        except (UnicodeDecodeError, UnicodeError):
+        # Reset pointer (file may have been read earlier in the pipeline)
+        uf.seek(0)
+
+        # Try all configured encoding + delimiter combos
+        df = None
+        for enc in config.CSV_ENCODINGS:
+            for sep in config.CSV_DELIMITERS:
+                uf.seek(0)
+                try:
+                    candidate = pd.read_csv(uf, encoding=enc, sep=sep, on_bad_lines='skip')
+                    if len(candidate.columns) > 1:
+                        df = candidate
+                        break
+                except (UnicodeDecodeError, LookupError, pd.errors.ParserError):
+                    continue
+            if df is not None:
+                break
+
+        if df is None:
             uf.seek(0)
-            df = pd.read_csv(uf, encoding='utf-8')
+            df = pd.read_csv(uf, on_bad_lines='skip')
 
         df['Country_Code'] = country_code
         frames.append(df)
