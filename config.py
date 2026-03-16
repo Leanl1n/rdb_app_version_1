@@ -59,17 +59,3 @@ GROUP_CONFIG = {
     "Enrichment": {"color": "#f59e0b", "bg": "#fffbeb"},
     "Transformation": {"color": "#10b981", "bg": "#ecfdf5"},
 }
-
-# Step Category Color — dark mode
-# Deep saturated bg so icons are visible on dark sidebar,
-# lighter color so SVG strokes remain crisp against the dark bg.
-GROUP_DARK_BG = {
-    "Cleaning":"#1e1b4b",   # deep indigo
-    "Enrichment":"#1c1710",   # deep amber
-    "Transformation":"#052e1c",   # deep emerald
-}
-GROUP_DARK_COLOR = {
-    "Cleaning":"#818cf8",   # light indigo
-    "Enrichment":"#fbbf24",   # light amber
-    "Transformation":"#34d399",   # light emerald
-}
