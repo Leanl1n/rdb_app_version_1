@@ -196,11 +196,20 @@ def load_uploaded_file(uploaded_file) -> tuple[pd.DataFrame, str]:
     if suffix in (".xlsx", ".xls"):
         return pd.read_excel(uploaded_file), "n/a"
     if suffix == ".csv":
-        encoding = detect_encoding(uploaded_file)
-        return (
-            pd.read_csv(uploaded_file, encoding=encoding, on_bad_lines="skip"),
-            encoding,
-        )
+        for enc in config.CSV_ENCODINGS:
+            for sep in config.CSV_DELIMITERS:
+                uploaded_file.seek(0)
+                try:
+                    df = pd.read_csv(
+                        uploaded_file, encoding=enc, sep=sep, on_bad_lines="skip",
+                    )
+                    if len(df.columns) > 1:
+                        return df, enc
+                except (UnicodeDecodeError, LookupError, pd.errors.ParserError):
+                    continue
+        # Last resort: default read
+        uploaded_file.seek(0)
+        return pd.read_csv(uploaded_file, on_bad_lines="skip"), "utf-8"
     raise ValueError("Unsupported format. Use CSV or Excel (.xlsx, .xls).")
 
 

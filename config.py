@@ -21,7 +21,7 @@ RAW_DATA_DIR = DATA_DIR / "raw"
 
 RAW_DATA_FILE = RAW_DATA_DIR / "test.csv"
 
-CSV_ENCODINGS = ['utf-8', 'utf-8-sig', 'latin1', 'cp1252']
+CSV_ENCODINGS = ['utf-8', 'utf-8-sig', 'utf-16', 'latin1', 'cp1252']
 CSV_DELIMITERS = ['\t', ',', ';']
 
 for directory in [DATA_DIR, OUTPUT_DATA_DIR, RAW_DATA_DIR]:
