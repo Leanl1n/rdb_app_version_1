@@ -49,6 +49,10 @@ STEP_REGISTRY = [
     {"id": "topic_cluster",
      "group": "Analysis",
      "label": "Topic clustering"},
+
+    {"id": "merge_csv",
+     "group": "Merge",
+     "label": "Merge CSV files"},
 ]
 
 ALL_LABELS = [s["label"] for s in STEP_REGISTRY]
@@ -59,6 +63,7 @@ GROUP_CONFIG = {
     "Enrichment": {"color": "#f59e0b", "bg": "#fffbeb"},
     "Transformation": {"color": "#10b981", "bg": "#ecfdf5"},
     "Analysis": {"color": "#0ea5e9", "bg": "#f0f9ff"},
+    "Merge": {"color": "#8b5cf6", "bg": "#f5f3ff"},
 }
 
 # Step Category Color — dark mode
@@ -69,10 +74,12 @@ GROUP_DARK_BG = {
     "Enrichment":"#1c1710",   # deep amber
     "Transformation":"#052e1c",   # deep emerald
     "Analysis":"#0c2a3d",          # deep sky blue
+    "Merge":"#2e1065",              # deep violet
 }
 GROUP_DARK_COLOR = {
     "Cleaning":"#818cf8",   # light indigo
     "Enrichment":"#fbbf24",   # light amber
     "Transformation":"#34d399",   # light emerald
     "Analysis":"#38bdf8",          # light sky blue
+    "Merge":"#a78bfa",              # light violet
 }
