@@ -21,6 +21,7 @@ if str(PROJECT_ROOT) not in sys.path:
 import config
 from src.cleaning.normalize_headers import normalize_headers
 from src.cleaning.removing_duplicates import remove_duplicates
+from src.cleaning.standardize_country import standardize_country
 from src.transformation.add_dates_metadata import add_dates_metadata
 from src.transformation.translate_columns import translate_columns
 from config import STEP_REGISTRY, GROUP_CONFIG
@@ -83,6 +84,21 @@ def render_sidebar(col_names: list) -> tuple:
         st.sidebar.caption("Requires: Remove duplicates")
         dup_columns = st.sidebar.multiselect("Columns to check", col_names, key="dup_cols")
 
+    country_column = None
+    convert_code = None
+    if "Standardize country" in selected_labels:
+        st.sidebar.caption("Requires: Standardize country")
+        country_column = st.sidebar.selectbox(
+            "Column containing country names",
+            col_names,
+            key="country_col",
+        )
+        convert_code = st.sidebar.selectbox(
+            "Convert to format",
+            ['ISO3', 'ISO2', 'name_short', 'name_official', 'continent', 'ISONumeric'],
+            key="country_code",
+        )
+
     if "Translate columns" in selected_labels:
         st.sidebar.caption("Requires: Translate columns")
         translate_cols_list = st.sidebar.multiselect("Columns to translate", col_names, key="trans_cols")
@@ -90,7 +106,7 @@ def render_sidebar(col_names: list) -> tuple:
         target_lang = col1.text_input("Target", value="en", key="target_lang")
         source_lang = col2.text_input("Source", value="auto", key="source_lang")
 
-    return selected_labels, dup_columns, translate_cols_list, target_lang, source_lang
+    return selected_labels, dup_columns, country_column, convert_code, translate_cols_list, target_lang, source_lang
 
 
 # Pipeline strip builder
@@ -121,7 +137,11 @@ def render_pipeline_strip(selected_steps: list):
 def detect_encoding(uploaded_file) -> str:
     raw = uploaded_file.read(50_000)
     uploaded_file.seek(0)
+    if raw[:2] in (b'\xff\xfe', b'\xfe\xff'):
+        return "utf-16"
     for enc in config.CSV_ENCODINGS:
+        if enc == "utf-16":
+            continue
         try:
             raw.decode(enc)
             return enc
@@ -136,6 +156,11 @@ def load_uploaded_file(uploaded_file) -> tuple[pd.DataFrame, str]:
         return pd.read_excel(uploaded_file), "n/a"
     if suffix == ".csv":
         encoding = detect_encoding(uploaded_file)
+        if encoding == "utf-16":
+            text = uploaded_file.read().decode("utf-16")
+            uploaded_file.seek(0)
+            buf = io.BytesIO(text.encode("utf-8"))
+            return pd.read_csv(buf, encoding="utf-8", sep="\t", on_bad_lines="skip"), encoding
         return (
             pd.read_csv(uploaded_file, encoding=encoding, on_bad_lines="skip"),
             encoding,
@@ -148,6 +173,8 @@ def run_pipeline(
     temp_path: str,
     steps: list,
     dup_columns: list | None,
+    country_column: str | None,
+    convert_code: str | None,
     translate_columns_list: list | None,
     target_lang: str,
     source_lang: str,
@@ -165,6 +192,13 @@ def run_pipeline(
                 df = remove_duplicates(
                     columns=dup_columns if dup_columns else None,
                     file_path=temp_path,
+                )
+
+            elif step == "Standardize country":
+                df = standardize_country(
+                    column=country_column,
+                    file_path=temp_path,
+                    convert_code=None if convert_code is None else convert_code.lower(),
                 )
 
             elif step == "Add date metadata":
@@ -215,7 +249,7 @@ def main():
         <div class="hero-actions">
             <span class="hero-badge"><span class="hero-badge-dot"></span>Ready</span>
             <span class="hero-badge">📁 CSV &amp; Excel</span>
-            <span class="hero-badge">⚡ 4 operations</span>
+            <span class="hero-badge">⚡ 5 operations</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -244,7 +278,7 @@ def main():
         return
 
     col_names = list(input_df.columns)
-    selected_steps, dup_columns, translate_cols_list, target_lang, source_lang = render_sidebar(col_names)
+    selected_steps, dup_columns, country_column, convert_code, translate_cols_list, target_lang, source_lang = render_sidebar(col_names)
 
     # ── Metric cards ─────────────────────────────────────────────────────
     st.markdown('<div class="section-divider"><span class="section-divider-label">Dataset Overview</span><span class="section-divider-line"></span></div>', unsafe_allow_html=True)
@@ -294,7 +328,7 @@ def main():
             with open(fd, "w", encoding="utf-8", newline="") as f:
                 input_df.to_csv(f, index=False)
             result_df = run_pipeline(
-                tmp_path, selected_steps, dup_columns,
+                tmp_path, selected_steps, dup_columns, country_column, convert_code,
                 translate_cols_list if "Translate columns" in selected_steps else None,
                 target_lang, source_lang, progress_placeholder,
             )

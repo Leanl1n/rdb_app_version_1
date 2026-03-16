@@ -21,7 +21,7 @@ RAW_DATA_DIR = DATA_DIR / "raw"
 
 RAW_DATA_FILE = RAW_DATA_DIR / "test.csv"
 
-CSV_ENCODINGS = ['utf-8', 'utf-8-sig', 'latin1', 'cp1252']
+CSV_ENCODINGS = ['utf-8', 'utf-8-sig', 'latin1', 'cp1252', 'utf-16']
 CSV_DELIMITERS = ['\t', ',', ';']
 
 for directory in [DATA_DIR, OUTPUT_DATA_DIR, RAW_DATA_DIR]:
@@ -37,6 +37,10 @@ STEP_REGISTRY = [
     {"id": "duplicates",
      "group": "Cleaning",
      "label": "Remove duplicates"},
+
+    {"id": "standardize_country",
+     "group": "Cleaning",
+     "label": "Standardize country"},
 
     {"id": "date",
      "group": "Enrichment",
