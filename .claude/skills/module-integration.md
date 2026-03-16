@@ -86,11 +86,13 @@ sevengen-internshipweek4.2/
    ```python
    {"id": "<short_id>",
     "group": "<Group Name>",  # Must match a key in GROUP_CONFIG
-    "label": "<Human-readable label>"},
+    "label": "<Human-readable label>",
+    "min_files": 1},          # Optional, default 1. Set to 2+ for multi-file steps.
    ```
    - `id`: short snake_case identifier (used internally)
    - `group`: must match a key in `GROUP_CONFIG` (or add a new one)
    - `label`: displayed in sidebar and pipeline strip
+   - `min_files` *(optional, default 1)*: minimum number of uploaded files required to enable this step. Steps with `min_files > 1` are automatically disabled in the sidebar when fewer files are uploaded. The main file uploader accepts multiple files; the sidebar enforces this constraint per-step.
 
 3. **If a new group is needed in `config.py`:**
    ```python
