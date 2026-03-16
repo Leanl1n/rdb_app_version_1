@@ -29,6 +29,8 @@ for directory in [DATA_DIR, OUTPUT_DATA_DIR, RAW_DATA_DIR]:
 
 # Add Steps
 # To add a new step: append one dict
+# Optional "min_files" key (default 1): minimum uploaded files needed to enable the step.
+# Steps with min_files > 1 are automatically disabled when fewer files are uploaded.
 STEP_REGISTRY = [
     {"id": "normalize",
      "group": "Cleaning",
@@ -52,7 +54,8 @@ STEP_REGISTRY = [
 
     {"id": "merge_csv",
      "group": "Merge",
-     "label": "Merge CSV files"},
+     "label": "Merge CSV files",
+     "min_files": 2},
 ]
 
 ALL_LABELS = [s["label"] for s in STEP_REGISTRY]

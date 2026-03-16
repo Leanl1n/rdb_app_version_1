@@ -51,7 +51,7 @@ def get_group_bg(group: str) -> str:
     return GROUP_CONFIG.get(group, {}).get("bg", "#f8fafc")
 
 # Sidebar
-def render_sidebar(col_names: list) -> tuple:
+def render_sidebar(col_names: list, file_count: int = 1) -> tuple:
     st.sidebar.markdown('<p class="sidebar-header">Pipeline Process</p>', unsafe_allow_html=True)
 
     search = st.sidebar.text_input("🔍 Search steps", placeholder="Search step", label_visibility="collapsed")
@@ -95,13 +95,21 @@ def render_sidebar(col_names: list) -> tuple:
 
                 # Individual steps as checkboxes
                 for step in group_steps:
+                    min_files = step.get("min_files", 1)
+                    step_blocked = file_count < min_files
+
+                    # Force-uncheck steps that can't run with current file count
+                    if step_blocked and st.session_state.get(step["id"], False):
+                        st.session_state[step["id"]] = False
+
                     checked = st.checkbox(
                         step["label"],
                         key=step["id"],
-                        value=run_all or st.session_state.get(step["id"], False),
-                        disabled=run_all,
+                        value=(not step_blocked) and (run_all or st.session_state.get(step["id"], False)),
+                        disabled=run_all or step_blocked,
+                        help=f"Requires at least {min_files} files" if step_blocked else None,
                     )
-                    if checked or run_all:
+                    if (checked or run_all) and not step_blocked:
                         selected_labels.append(step["label"])
 
     # Per-step options
@@ -121,18 +129,6 @@ def render_sidebar(col_names: list) -> tuple:
         translate_cols_list = st.sidebar.multiselect("Columns to translate", col_names, key="trans_cols")
         target_lang = st.sidebar.text_input("Target language code", value="en", key="target_lang")
         source_lang = st.sidebar.text_input("Source language code", value="auto", key="source_lang")
-
-    # Merge CSV options
-    merge_files = None
-    if "Merge CSV files" in selected_labels:
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("**Merge CSV files — options**")
-        merge_files = st.sidebar.file_uploader(
-            "Upload CSV files to merge",
-            type=["csv"],
-            accept_multiple_files=True,
-            key="merge_csv_files",
-        )
 
     # Topic clustering options
     cluster_params = None
@@ -155,7 +151,7 @@ def render_sidebar(col_names: list) -> tuple:
             "clean_text_option": cluster_clean,
         }
 
-    return selected_labels, dup_columns, translate_cols_list, target_lang, source_lang, cluster_params, merge_files
+    return selected_labels, dup_columns, translate_cols_list, target_lang, source_lang, cluster_params
 
 
 # Pipeline strip builder
@@ -313,29 +309,38 @@ def main():
 
     # ── File upload ──────────────────────────────────────────────────────
     st.markdown('<div class="section-divider"><span class="section-divider-label">Input</span><span class="section-divider-line"></span></div>', unsafe_allow_html=True)
-    uploaded_file = st.file_uploader(
+    uploaded_files = st.file_uploader(
         "Upload CSV or Excel",
         type=["csv", "xlsx", "xls"],
+        accept_multiple_files=True,
         label_visibility="collapsed",
     )
 
-    if not uploaded_file:
+    if not uploaded_files:
         st.markdown("""
         <div style="font-family:'DM Sans',sans-serif;font-size:0.82rem;color:#94a3b8;
              text-align:center;padding:1rem 0;letter-spacing:0.01em;">
-            Drop a file above to begin — supports CSV, XLSX, XLS up to 200MB
+            Drop files above to begin — supports CSV, XLSX, XLS up to 200MB
         </div>
         """, unsafe_allow_html=True)
         return
 
+    file_count = len(uploaded_files)
+
+    # Load the first file for preview and single-file pipeline steps
     try:
-        input_df, _ = load_uploaded_file(uploaded_file)
+        input_df, _ = load_uploaded_file(uploaded_files[0])
     except Exception as e:
         st.error(f"Failed to load file: {e}")
         return
 
     col_names = list(input_df.columns)
-    selected_steps, dup_columns, translate_cols_list, target_lang, source_lang, cluster_params, merge_files = render_sidebar(col_names)
+    selected_steps, dup_columns, translate_cols_list, target_lang, source_lang, cluster_params = render_sidebar(col_names, file_count=file_count)
+
+    # ── File info ─────────────────────────────────────────────────────────
+    if file_count > 1:
+        st.info(f"{file_count} files uploaded — multi-file steps (e.g. Merge) are now available. "
+                f"Previewing: **{uploaded_files[0].name}**")
 
     # ── Metric cards ─────────────────────────────────────────────────────
     st.markdown('<div class="section-divider"><span class="section-divider-label">Dataset Overview</span><span class="section-divider-line"></span></div>', unsafe_allow_html=True)
@@ -377,10 +382,6 @@ def main():
     if run_clicked and "Translate columns" in selected_steps and not translate_cols_list:
         st.warning("Please select at least one column to translate.")
         return
-    if run_clicked and "Merge CSV files" in selected_steps and not merge_files:
-        st.warning("Please upload CSV files to merge in the sidebar.")
-        return
-
     if run_clicked and selected_steps:
         progress_placeholder = st.empty()
         fd, tmp_path = tempfile.mkstemp(suffix=".csv")
@@ -392,7 +393,7 @@ def main():
                 translate_cols_list if "Translate columns" in selected_steps else None,
                 target_lang, source_lang, progress_placeholder,
                 cluster_params=cluster_params if "Topic clustering" in selected_steps else None,
-                merge_files=merge_files if "Merge CSV files" in selected_steps else None,
+                merge_files=uploaded_files if "Merge CSV files" in selected_steps else None,
             )
         finally:
             try:
@@ -433,7 +434,7 @@ def main():
         # ── Download ──────────────────────────────────────────────────────
         st.markdown('<div class="section-divider" style="margin-top:1rem"><span class="section-divider-label">Download</span><span class="section-divider-line"></span></div>', unsafe_allow_html=True)
         out_format = st.radio("Format", ["CSV", "Excel"], horizontal=True, key="out_fmt")
-        base_name = Path(uploaded_file.name).stem
+        base_name = Path(uploaded_files[0].name).stem
 
         if out_format == "CSV":
             st.download_button(
