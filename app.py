@@ -69,7 +69,7 @@ def render_sidebar(col_names: list) -> tuple:
     selected_labels = []
 
     for group_name, group_steps in groups.items():
-        with st.sidebar.expander(group_name, expanded=True):
+        with st.sidebar.expander(group_name, expanded=False):
             for step in group_steps:
                 if st.checkbox(step["label"], key=step["id"]):
                     selected_labels.append(step["label"])
