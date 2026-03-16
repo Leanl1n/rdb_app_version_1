@@ -92,6 +92,8 @@ def render_sidebar(col_names: list) -> tuple:
             "Column containing country names",
             col_names,
             key="country_col",
+            index=None,
+            placeholder="Select Column"
         )
         convert_code = st.sidebar.selectbox(
             "Convert to format",
@@ -195,11 +197,14 @@ def run_pipeline(
                 )
 
             elif step == "Standardize country":
-                df = standardize_country(
-                    column=country_column,
-                    file_path=temp_path,
-                    convert_code=None if convert_code is None else convert_code.lower(),
-                )
+                if not country_column:
+                    continue
+                else:
+                    df = standardize_country(
+                        column=country_column,
+                        file_path=temp_path,
+                        convert_code=convert_code
+                    )
 
             elif step == "Add date metadata":
                 df = add_dates_metadata(file_path=temp_path)

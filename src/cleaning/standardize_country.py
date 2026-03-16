@@ -20,12 +20,14 @@ def standardize_country(column,file_path,convert_code) -> pd.DataFrame:
     df = read_csv(path)
     df_standardized = df.copy()
 
+
     if column not in df_standardized.columns:
         raise ValueError(f"Column '{column}' not found in the dataset.")
 
     cc = coco.CountryConverter()
-    df_standardized[column] = cc.pandas_convert(
+    col_idx = df_standardized.columns.get_loc(column) + 1
+    df_standardized.insert(col_idx, "Country_Code", cc.pandas_convert(
         series=df_standardized[column], to=convert_code, not_found=None
-    )
+    ))
 
     return df_standardized
