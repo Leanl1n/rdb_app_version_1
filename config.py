@@ -29,6 +29,8 @@ for directory in [DATA_DIR, OUTPUT_DATA_DIR, RAW_DATA_DIR]:
 
 # Add Steps
 # To add a new step: append one dict
+# Optional "min_files" key (default 1): minimum uploaded files needed to enable the step.
+# Steps with min_files > 1 are automatically disabled when fewer files are uploaded.
 STEP_REGISTRY = [
     {"id": "normalize",
      "group": "Cleaning",
@@ -49,6 +51,15 @@ STEP_REGISTRY = [
     {"id": "translate",
      "group": "Enrichment",
      "label": "Translate columns"},
+
+    {"id": "topic_cluster",
+     "group": "Analysis",
+     "label": "Topic clustering"},
+
+    {"id": "merge_csv",
+     "group": "Merge",
+     "label": "Merge CSV files",
+     "min_files": 2},
 ]
 
 ALL_LABELS = [s["label"] for s in STEP_REGISTRY]
@@ -58,4 +69,22 @@ GROUP_CONFIG = {
     "Cleaning": {"color": "#6366f1", "bg": "#eef2ff"},
     "Enrichment": {"color": "#f59e0b", "bg": "#fffbeb"},
     "Transformation": {"color": "#10b981", "bg": "#ecfdf5"},
+    "Analysis": {"color": "#0ea5e9", "bg": "#f0f9ff"},
+    "Merge": {"color": "#8b5cf6", "bg": "#f5f3ff"},
+}
+
+# Step Category Color — dark mode
+GROUP_DARK_BG = {
+    "Cleaning":"#1e1b4b",   # deep indigo
+    "Enrichment":"#1c1710",   # deep amber
+    "Transformation":"#052e1c",   # deep emerald
+    "Analysis":"#0c2a3d",          # deep sky blue
+    "Merge":"#2e1065",              # deep violet
+}
+GROUP_DARK_COLOR = {
+    "Cleaning":"#818cf8",   # light indigo
+    "Enrichment":"#fbbf24",   # light amber
+    "Transformation":"#34d399",   # light emerald
+    "Analysis":"#38bdf8",          # light sky blue
+    "Merge":"#a78bfa",              # light violet
 }
