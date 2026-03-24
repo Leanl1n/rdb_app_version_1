@@ -251,11 +251,6 @@ def main():
         <div class="hero-eyebrow">Media Intelligence Platform</div>
         <p class="main-header">Data Pipeline</p>
         <p class="main-subtitle">Transform raw media data into clean, enriched datasets ready for analysis.</p>
-        <div class="hero-actions">
-            <span class="hero-badge"><span class="hero-badge-dot"></span>Ready</span>
-            <span class="hero-badge">📁 CSV &amp; Excel</span>
-            <span class="hero-badge">⚡ 5 operations</span>
-        </div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -343,8 +338,13 @@ def main():
             except OSError:
                 pass
 
-        if result_df is None:
-            return
+        if result_df is not None:
+            st.session_state["result_df"] = result_df
+            st.session_state["result_input_rows"] = len(input_df)
+
+    if "result_df" in st.session_state:
+        result_df = st.session_state["result_df"]
+        input_rows = st.session_state["result_input_rows"]
 
         # ── Results ──────────────────────────────────────────────────────
         st.markdown('<div class="section-divider" style="margin-top:1.5rem"><span class="section-divider-label">Results</span><span class="section-divider-line"></span></div>', unsafe_allow_html=True)
@@ -359,7 +359,7 @@ def main():
                 <div class="status-lbl">Records after processing</div>
             </div>""", unsafe_allow_html=True)
         with r2:
-            delta = len(input_df) - len(result_df)
+            delta = input_rows - len(result_df)
             sign = "−" if delta > 0 else "+"
             st.markdown(f"""
             <div class="status-box cols">
@@ -380,7 +380,7 @@ def main():
 
         if out_format == "CSV":
             st.download_button(
-                label="⬇  Download CSV",
+                label="Download CSV",
                 data=result_df.to_csv(index=False).encode("utf-8"),
                 file_name=f"{base_name}_processed.csv",
                 mime="text/csv",
@@ -390,7 +390,7 @@ def main():
             result_df.to_excel(buf, index=False, engine="openpyxl")
             buf.seek(0)
             st.download_button(
-                label="⬇  Download Excel",
+                label="Download Excel",
                 data=buf.getvalue(),
                 file_name=f"{base_name}_processed.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

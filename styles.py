@@ -60,31 +60,7 @@ STYLES = """
     letter-spacing: 0.18em;
     margin-bottom: 0.5rem;
 }
-.hero-actions {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    margin-top: 1rem;
-}
-.hero-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 0.72rem;
-    font-weight: 500;
-    color: #475569;
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 20px;
-    padding: 3px 10px;
-}
-.hero-badge-dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: #22c55e;
-    display: inline-block;
-}
+
 .section-title {
     font-family: 'DM Sans', sans-serif;
     font-size: 0.68rem;
@@ -125,6 +101,7 @@ section[data-testid="stSidebar"] details {
     box-shadow: none !important;
     background: transparent !important;
     padding: 0 !important;
+    margin-bottom: -1rem
 }
 section[data-testid="stSidebar"] details summary {
     font-size: 0.78rem !important;
