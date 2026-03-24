@@ -271,6 +271,15 @@ def main():
         """, unsafe_allow_html=True)
         return
 
+    # Full reset of all state when a new file is uploaded
+    file_id = uploaded_file.file_id
+    if st.session_state.get("last_file_id") != file_id:
+        keys_to_keep = {"last_file_id"}
+        for key in list(st.session_state.keys()):
+            if key not in keys_to_keep:
+                del st.session_state[key]
+        st.session_state["last_file_id"] = file_id
+
     try:
         input_df, _ = load_uploaded_file(uploaded_file)
     except Exception as e:
@@ -374,15 +383,21 @@ def main():
         st.caption(f"Showing first 100 of {len(result_df):,} rows.")
 
         # ── Download ──────────────────────────────────────────────────────
+        
+
         st.markdown('<div class="section-divider" style="margin-top:1rem"><span class="section-divider-label">Download</span><span class="section-divider-line"></span></div>', unsafe_allow_html=True)
         out_format = st.radio("Format", ["CSV", "Excel"], horizontal=True, key="out_fmt")
-        base_name = Path(uploaded_file.name).stem
+
+        #Renaming of File (Default: original name + _processed)
+        filename = st.text_input("Output filename: ",
+                                 value=Path(uploaded_file.name).stem,
+                                 key="output_base_name")
 
         if out_format == "CSV":
             st.download_button(
                 label="Download CSV",
                 data=result_df.to_csv(index=False).encode("utf-8"),
-                file_name=f"{base_name}_processed.csv",
+                file_name=filename + "_cleaned.csv",
                 mime="text/csv",
             )
         else:
@@ -392,7 +407,7 @@ def main():
             st.download_button(
                 label="Download Excel",
                 data=buf.getvalue(),
-                file_name=f"{base_name}_processed.xlsx",
+                file_name=filename + "_cleaned.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
 
