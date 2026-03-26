@@ -33,7 +33,7 @@ from tools import tool_data_pipeline, tool_merge_csv
 
 TOOLS = [
     {"id": "pipeline", "label": "Data Pipeline", "icon": ":material/tune:"},
-    {"id": "merge", "label": "Merge CSV", "icon": ":material/merge:"},
+    {"id": "merge", "label": "Merge Data", "icon": ":material/merge:"},
 ]
 
 def _render_tool_selector():

@@ -59,7 +59,8 @@ def render_pipeline_strip(selected_steps: list):
         return
     chips = []
     for i, label in enumerate(selected_steps):
-        step = next((s for s in STEP_REGISTRY if s["label"] == label), None)
+        base_label = label.split(" #")[0] if " #" in label else label
+        step = next((s for s in STEP_REGISTRY if s["label"] == base_label), None)
         group = step["group"] if step else "Cleaning"
         color = get_group_color(group)
         bg = get_group_bg(group)
@@ -78,7 +79,12 @@ def render_pipeline_strip(selected_steps: list):
 
 
 def render_download(result_df: pd.DataFrame, default_name: str):
-    st.markdown('<div class="section-divider" style="margin-top:1rem"><span class="section-divider-label">Download</span><span class="section-divider-line"></span></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-divider" style="margin-top:1rem">'
+        '<span class="section-divider-label">Download</span>'
+        '<span class="section-divider-line"></span></div>',
+        unsafe_allow_html=True,
+    )
     out_format = st.radio("Format", ["CSV", "Excel"], horizontal=True, key="out_fmt")
 
     if "output_base_name" not in st.session_state:

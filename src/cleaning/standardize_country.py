@@ -1,12 +1,10 @@
 import country_converter as coco
-from pathlib import Path
-from typing import Optional
 import pandas as pd
 import config
 from csv_handler import read_csv
 
 
-def standardize_country(column,file_path,convert_code) -> pd.DataFrame:
+def standardize_country(column, file_path, convert_code) -> pd.DataFrame:
     """
     Args:
         column: Name of the column containing country names/codes to standardize.
@@ -19,7 +17,6 @@ def standardize_country(column,file_path,convert_code) -> pd.DataFrame:
     path = str(file_path) if file_path is not None else str(config.RAW_DATA_FILE)
     df = read_csv(path)
     df_standardized = df.copy()
-
 
     if column not in df_standardized.columns:
         raise ValueError(f"Column '{column}' not found in the dataset.")

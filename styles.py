@@ -95,6 +95,12 @@ STYLES = """
 section[data-testid="stSidebar"] .stMarkdown { margin-bottom: 0 !important; }
 section[data-testid="stSidebar"] .element-container { margin-bottom: 0 !important; }
 
+/* ── Sidebar divider compact ─────────────────── */
+section[data-testid="stSidebar"] hr {
+    margin-top: 0.3rem !important;
+    margin-bottom: 0.3rem !important;
+}
+
 /* ── Sidebar checkboxes ────────────────────────── */
 section[data-testid="stSidebar"] .stCheckbox {
     margin-bottom: -0.6rem !important;

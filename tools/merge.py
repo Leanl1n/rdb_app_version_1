@@ -1,12 +1,12 @@
 """
-Merge CSV tool — combine multiple CSV files into one.
+Merge Data tool — combine multiple CSV/Excel files into one.
 """
 
 import pandas as pd
 import streamlit as st
 
 from src.merge.merge_csv import merge_csv
-from helpers import load_uploaded_file, render_download
+from helpers import render_download
 
 
 def _load_file_manifest(uploaded_files: list) -> pd.DataFrame:
@@ -15,7 +15,11 @@ def _load_file_manifest(uploaded_files: list) -> pd.DataFrame:
     for uf in uploaded_files:
         uf.seek(0)
         try:
-            df_peek = pd.read_csv(uf, on_bad_lines="skip", nrows=None)
+            suffix = uf.name.lower().rsplit('.', 1)[-1] if '.' in uf.name else ''
+            if suffix in ('xlsx', 'xls'):
+                df_peek = pd.read_excel(uf)
+            else:
+                df_peek = pd.read_csv(uf, on_bad_lines="skip", nrows=None)
             n_rows = len(df_peek)
             n_cols = len(df_peek.columns)
         except Exception:
@@ -34,21 +38,26 @@ def tool_merge_csv():
     st.markdown("""
     <div class="page-hero">
         <div class="hero-eyebrow">Media Intelligence Platform</div>
-        <p class="main-header">Merge CSV Files</p>
-        <p class="main-subtitle">Combine multiple CSV files into a single dataset, grouped by country code.</p>
+        <p class="main-header">Merge Data</p>
+        <p class="main-subtitle">Combine multiple CSV or Excel files into a single dataset.</p>
         <div class="hero-actions">
             <span class="hero-badge"><span class="hero-badge-dot"></span>Ready</span>
             <span class="hero-badge">Multi-file</span>
-            <span class="hero-badge">Auto country code</span>
+            <span class="hero-badge">CSV &amp; Excel</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
     # ── File upload (multi) ──────────────────────────────────────────
-    st.markdown('<div class="section-divider"><span class="section-divider-label">Input</span><span class="section-divider-line"></span></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-divider">'
+        '<span class="section-divider-label">Input</span>'
+        '<span class="section-divider-line"></span></div>',
+        unsafe_allow_html=True,
+    )
     uploaded_files = st.file_uploader(
-        "Upload CSV files to merge",
-        type=["csv"],
+        "Upload CSV or Excel files to merge",
+        type=["csv", "xlsx", "xls"],
         accept_multiple_files=True,
         label_visibility="collapsed",
         key="merge_uploader",
@@ -58,13 +67,18 @@ def tool_merge_csv():
         st.markdown("""
         <div style="font-family:'DM Sans',sans-serif;font-size:0.82rem;color:#94a3b8;
              text-align:center;padding:1rem 0;letter-spacing:0.01em;">
-            Drop at least 2 CSV files above to begin merging
+            Drop at least 2 files above to begin merging (CSV, XLSX, XLS)
         </div>
         """, unsafe_allow_html=True)
         return
 
     # ── File manifest ────────────────────────────────────────────────
-    st.markdown('<div class="section-divider"><span class="section-divider-label">File Summary</span><span class="section-divider-line"></span></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-divider">'
+        '<span class="section-divider-label">File Summary</span>'
+        '<span class="section-divider-line"></span></div>',
+        unsafe_allow_html=True,
+    )
 
     manifest_df = _load_file_manifest(uploaded_files)
     st.dataframe(manifest_df, use_container_width=True, hide_index=True)
